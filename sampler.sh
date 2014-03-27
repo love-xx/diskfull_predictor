@@ -2,7 +2,10 @@
 
 # walks trough each mount point, calculates the interval between the first and last check, and uses it as a step to calculate when it will get full
 # support: gyula.weber.in@gmail.com
-
+WINDOWSIZE="$@"
+if [ ${#WINDOWSIZE} -lt 3 ]; then
+    echo "usage: ${0} <window size> (window size can be 2 hours, 4 days, and so on)"
+fi
 TODAY=$(date  +"%Y-%m-%d")
 sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read MP; do
     echo
@@ -32,7 +35,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     PROJRES=`sqlite3 ./disk.sqlite3 "${PROJQ}"`
     echo "projecting to date: ${PROJRES}"
 
-    QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
+    QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
     SAMPLES=`sqlite3 ./disk.sqlite3 "${QSAMPLES}"`
 
     if [ ${SAMPLES} -lt 2 ]; then
@@ -41,8 +44,8 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 	exit
     fi
 
-    QMIN="select min(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
-    QMAX="select max(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
+    QMIN="select min(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
+    QMAX="select max(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
 
     RESMIN=`sqlite3 ./disk.sqlite3 "${QMIN}"`
     RESMAX=`sqlite3 ./disk.sqlite3 "${QMAX}"`
@@ -72,5 +75,5 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     fi    
     FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    echo "filltime: ${FILLTIME} (precision ${JDIFFDAY} day or $JDIFFHOUR hours or $JDIFFMIN minutes)"
+    echo "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} )"
 done
