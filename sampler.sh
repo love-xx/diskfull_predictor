@@ -42,7 +42,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 
     DTWINDOWSQ="select strftime('%s','${MAXDTRES}') - strftime('%s','${MINDTRES}')" # unixepoch difference
     DTWINRES=`sqlite3 ./disk.sqlite3 "${DTWINDOWSQ}"`
-
+    echo "windows size: ${DTWINRES}"
     # add projection to current date
     PROJQ="select datetime(strftime('%s','now') + ${DTWINRES},'unixepoch','localtime')"
     PROJRES=`sqlite3 ./disk.sqlite3 "${PROJQ}"`
@@ -57,37 +57,20 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 	exit
     fi
 
-    QMIN="select min(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
-    QMAX="select max(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
+    LASTFREE_Q="select free from disk_info where mount_point like '${MP}' order by dt desc limit 1"
+    LASTFREE_RES=$(sqlite3 ./disk.sqlite3 "${LASTFREE_Q}")
+    echo "last free: ${LASTFREE_RES}"
 
-    RESMIN=`sqlite3 ./disk.sqlite3 "${QMIN}"`
-    RESMAX=`sqlite3 ./disk.sqlite3 "${QMAX}"`
-
-    dbg "resmin: ${RESMIN}"
-    dbg "resmax: ${RESMAX}"
-
-    RESMINMB=$(($RESMIN/1024))
-    RESMINGB=$(($RESMIN/1024/1024))
-    
-    dbg "min: ${RESMIN}"
-    dbg "max: ${RESMAX}"
-    
-    DIFF=$(($RESMAX-$RESMIN))
-    dbg "diff: ${DIFF}"
-    dbg "free: ${RESMIN}"
-
-    PROJECTEDFREE=$(($RESMIN-$DIFF))
-    PROJECTEDFREEMB=$(($PROJECTEDFREE/1024))
-    PROJECTEDFREEGB=$(($PROJECTEDFREE/1024/1024))
-    dbg "last free: ${RESMIN} ( $RESMINMB MB / $RESMINGB GB)"
-    dsp "[samples: ${SAMPLES}] free space at ${PROJRES}: $PROJECTEDFREE ( $PROJECTEDFREEMB MB / $PROJECTEDFREEGB GB) ( diff: ${DIFF} )(${MP})"
-
-    if [ ${DIFF} -lt 1 ]; then
-	dsp "free space difference in the database is zero, cannot predict yet."
+    ADDSUM_Q="select sum(diff) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}' and increased <> 2"
+    dbg "$ADDSUM_Q"
+    ADDSUM_RES=$(sqlite3 ./disk.sqlite3 "$ADDSUM_Q")
+    dbg "change: ${ADDSUM_RES}"
+    if [ ${#ADDSUM_RES} -lt 1 ]; then
+	echo "no diff, cannot predict"
 	continue
-    fi    
-    FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
+    fi
+    FILLTIMEDIFF=$(($ADDSUM_RES*$DTWINRES))
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    dsp "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} )"
+    dsp "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} ) [ ${MP} ]"
     dsp " "
 done

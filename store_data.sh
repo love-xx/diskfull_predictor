@@ -13,15 +13,15 @@ df| grep -vE '^Filesystem' | awk '{print $1 ";" $4}' | grep -v 'tmpfs' | grep -v
     AVAIL=$(echo ${ENTRY} | awk -F';' '{print $2}')
     #    echo "mp: ${MP}, avail ${AVAIL}"
 
-    echo "getting last entry"
+#    echo "getting last entry"
     LASTQ="select free from disk_info where mount_point like '${MP}' order by dt desc limit 1"
     LASTRES=`sqlite3 ./disk.sqlite3 "${LASTQ}"`
     if [ ${#LASTRES} -lt 1 ]; then
-	LASTRES=0
+	LASTRES=${AVAIL}
     fi
     INCREASED=0
 
-    echo "lastres: ${LASTRES}"
+#    echo "lastres: ${LASTRES}"
     
     if [ ${LASTRES} -lt ${AVAIL} ]; then
 	INCREASED=1
@@ -30,10 +30,10 @@ df| grep -vE '^Filesystem' | awk '{print $1 ";" $4}' | grep -v 'tmpfs' | grep -v
     else
 	INCREASED=0
     fi
-
-    Q="insert into disk_info(mount_point,dt,free,increased)  values('${MP}',datetime('now'),${AVAIL},${INCREASED})"
-    echo "$Q"
-    echo "running:     sqlite3 ./disk.sqlite3 ${Q}" 
+    DIFF=$(($LASTRES-$AVAIL))
+#    echo "Change: ${DIFF}"
+    Q="insert into disk_info(mount_point,dt,free,increased,diff)  values('${MP}',datetime('now'),${AVAIL},${INCREASED},${DIFF})"
+#    echo "running:     sqlite3 ./disk.sqlite3 ${Q}" 
     sqlite3 ./disk.sqlite3 "${Q}"
 done
 
