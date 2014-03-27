@@ -15,4 +15,4 @@ A very simpe shell script that tries to determine when the disks will be full fr
 
 == how it works ==
 
-It check the min/max difference in a given time window and projects it to determine when the disk will be filled up.
+It check the disk space change in a given time window and projects it to determine when the disk will be filled up.
