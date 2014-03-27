@@ -3,15 +3,28 @@
 # walks trough each mount point, calculates the interval between the first and last check, and uses it as a step to calculate when it will get full
 # support: gyula.weber.in@gmail.com
 WINDOWSIZE="$@"
+
+# debug
+function dbg {
+#   echo "( $@ )"
+   I=2
+}
+
+# display
+function dsp {
+    echo "$@"
+}
+
+
 if [ ${#WINDOWSIZE} -lt 3 ]; then
-    echo "usage: ${0} <window size> (window size can be 2 hours, 4 days, and so on)"
+    dsp "usage: ${0} <window size> (window size can be 2 hours, 4 days, and so on)"
+    exit
 fi
 TODAY=$(date  +"%Y-%m-%d")
 sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read MP; do
-    echo
-    echo
-    echo "### disk stats for ${MP} ####"
-    echo
+    dbg " "
+    dbg "### disk stats for ${MP} ####"
+    dbg " "
     
 
     MINDT="select min(datetime(dt,'localtime')) from disk_info where mount_point like '${MP}'"
@@ -22,10 +35,10 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     JDIFFDAY=`sqlite3 ./disk.sqlite3 "select julianday(\"$MAXDTRES\") - julianday(\"$MINDTRES\")"`
     JDIFFHOUR=$(echo $JDIFFDAY*24 | bc)
     JDIFFMIN=$(echo $JDIFFHOUR*60 | bc)
-    echo "daydiff: ${JDIFFDAY}"
-    echo "hourdiff: ${JDIFFHOUR}"
-    echo "first data at: ${MINDTRES}"
-    echo "last data at: ${MAXDTRES}"
+    dbg "daydiff: ${JDIFFDAY}"
+    dbg "hourdiff: ${JDIFFHOUR}"
+    dbg "first data at: ${MINDTRES}"
+    dbg "last data at: ${MAXDTRES}"
 
     DTWINDOWSQ="select strftime('%s','${MAXDTRES}') - strftime('%s','${MINDTRES}')" # unixepoch difference
     DTWINRES=`sqlite3 ./disk.sqlite3 "${DTWINDOWSQ}"`
@@ -33,14 +46,14 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     # add projection to current date
     PROJQ="select datetime(strftime('%s','now') + ${DTWINRES},'unixepoch','localtime')"
     PROJRES=`sqlite3 ./disk.sqlite3 "${PROJQ}"`
-    echo "projecting to date: ${PROJRES}"
+    dbg "projecting to date: ${PROJRES}"
 
     QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
     SAMPLES=`sqlite3 ./disk.sqlite3 "${QSAMPLES}"`
 
     if [ ${SAMPLES} -lt 2 ]; then
-	echo "samples: ${SAMPLES}"
-	echo "i need at least two sample for calculations"
+	dsp "samples: ${SAMPLES}"
+	dsp "i need at least two sample for calculations"
 	exit
     fi
 
@@ -50,30 +63,31 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     RESMIN=`sqlite3 ./disk.sqlite3 "${QMIN}"`
     RESMAX=`sqlite3 ./disk.sqlite3 "${QMAX}"`
 
-    echo "resmin: ${RESMIN}"
-    echo "resmax: ${RESMAX}"
+    dbg "resmin: ${RESMIN}"
+    dbg "resmax: ${RESMAX}"
 
     RESMINMB=$(($RESMIN/1024))
     RESMINGB=$(($RESMIN/1024/1024))
     
-    echo "min: ${RESMIN}"
-    echo "max: ${RESMAX}"
+    dbg "min: ${RESMIN}"
+    dbg "max: ${RESMAX}"
     
     DIFF=$(($RESMAX-$RESMIN))
-    echo "diff: ${DIFF}"
-    echo "free: ${RESMIN}"
+    dbg "diff: ${DIFF}"
+    dbg "free: ${RESMIN}"
 
     PROJECTEDFREE=$(($RESMIN-$DIFF))
     PROJECTEDFREEMB=$(($PROJECTEDFREE/1024))
     PROJECTEDFREEGB=$(($PROJECTEDFREE/1024/1024))
-    echo "last free: ${RESMIN} ( $RESMINMB MB / $RESMINGB GB)"
-    echo "[samples: ${SAMPLES}] free space at ${PROJRES}: $PROJECTEDFREE ( $PROJECTEDFREEMB MB / $PROJECTEDFREEGB GB) ( diff: ${DIFF} )(${MP})"
+    dbg "last free: ${RESMIN} ( $RESMINMB MB / $RESMINGB GB)"
+    dsp "[samples: ${SAMPLES}] free space at ${PROJRES}: $PROJECTEDFREE ( $PROJECTEDFREEMB MB / $PROJECTEDFREEGB GB) ( diff: ${DIFF} )(${MP})"
 
     if [ ${DIFF} -lt 1 ]; then
-	echo "free space difference in the database is zero, cannot predict yet."
+	dsp "free space difference in the database is zero, cannot predict yet."
 	continue
     fi    
     FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    echo "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} )"
+    dsp "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} )"
+    dsp " "
 done
