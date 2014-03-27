@@ -7,7 +7,7 @@ if [ ! -f ./disk.sqlite3 ]; then
     sqlite3 ./disk.sqlite3 <./schema.sql
 fi
 
-df| grep -vE '^Filesystem' | awk '{print $1 ";" $4}' | grep -v 'tmpfs' | grep -v 'udev'| grep -v 'none' | sort | uniq | while read ENTRY; do
+df| tail -n+2 | awk '{print $1 ";" $4}' | grep -v 'tmpfs' | grep -v 'udev'| grep -v 'none' | sort | uniq | while read ENTRY; do
     #    echo "entry: ${ENTRY}"
     MP=$(echo ${ENTRY} | awk -F';' '{print $1}')
     AVAIL=$(echo ${ENTRY} | awk -F';' '{print $2}')

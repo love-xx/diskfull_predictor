@@ -73,7 +73,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     # 3. hozzaadjuk a jelenlegi datumhoz
     FILLTIMEDIFF=$(($LASTFREE_RES/$ADDSUM_RES*$DTWINRES))
 
-    dsp "Fill time diff: ${FILLTIMEDIFF}"
+    dbg "Fill time diff: ${FILLTIMEDIFF}"
 
     # calculate when it will fill up
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
