@@ -6,7 +6,7 @@ WINDOWSIZE="$@"
 
 # debug
 function dbg {
-#   echo "( $@ )"
+   echo "( $@ )"
    I=2
 }
 
@@ -21,32 +21,31 @@ if [ ${#WINDOWSIZE} -lt 3 ]; then
     exit
 fi
 TODAY=$(date  +"%Y-%m-%d")
+
+BACKDT="select datetime('now','-${WINDOWSIZE}')"
+BACKDTRES=$(sqlite3 ./disk.sqlite3 "${BACKDT}")
+
+CDT="select datetime('now')"
+CDTRES=$(sqlite3 ./disk.sqlite3 "${CDT}")
+
+BACKDTWINQ="select strftime('%s','${CDTRES}') - strftime('%s','${BACKDTRES}')"
+BACKDTWINRES=$(sqlite3 ./disk.sqlite3 "$BACKDTWINQ") 
+
+echo "measuring from: 
+${BACKDTRES} -
+${CDTRES}
+-------------------------
+"
+
+
 sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read MP; do
     dbg " "
     dbg "### disk stats for ${MP} ####"
     dbg " "
     
 
-    MINDT="select min(datetime(dt,'localtime')) from disk_info where mount_point like '${MP}'"
-    MAXDT="select max(datetime(dt,'localtime')) from disk_info where mount_point like '${MP}'"
-    
-    MINDTRES=`sqlite3 ./disk.sqlite3 "${MINDT}"`
-    MAXDTRES=`sqlite3 ./disk.sqlite3 "${MAXDT}"`
-    JDIFFDAY=`sqlite3 ./disk.sqlite3 "select julianday(\"$MAXDTRES\") - julianday(\"$MINDTRES\")"`
-    JDIFFHOUR=$(echo $JDIFFDAY*24 | bc)
-    JDIFFMIN=$(echo $JDIFFHOUR*60 | bc)
-    dbg "daydiff: ${JDIFFDAY}"
-    dbg "hourdiff: ${JDIFFHOUR}"
-    dbg "first data at: ${MINDTRES}"
-    dbg "last data at: ${MAXDTRES}"
-
-    DTWINDOWSQ="select strftime('%s','${MAXDTRES}') - strftime('%s','${MINDTRES}')" # unixepoch difference
-    DTWINRES=`sqlite3 ./disk.sqlite3 "${DTWINDOWSQ}"`
-    echo "windows size: ${DTWINRES}"
-    # add projection to current date
-    PROJQ="select datetime(strftime('%s','now') + ${DTWINRES},'unixepoch','localtime')"
-    PROJRES=`sqlite3 ./disk.sqlite3 "${PROJQ}"`
-    dbg "projecting to date: ${PROJRES}"
+    DTWINRES=$BACKDTWINRES
+    dbg "windows size: ${DTWINRES}"
 
     QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
     SAMPLES=`sqlite3 ./disk.sqlite3 "${QSAMPLES}"`
@@ -59,7 +58,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 
     LASTFREE_Q="select free from disk_info where mount_point like '${MP}' order by dt desc limit 1"
     LASTFREE_RES=$(sqlite3 ./disk.sqlite3 "${LASTFREE_Q}")
-    echo "last free: ${LASTFREE_RES}"
+    dbg "last free: ${LASTFREE_RES}"
 
     ADDSUM_Q="select sum(diff) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}' and increased <> 2"
     dbg "$ADDSUM_Q"
@@ -69,8 +68,15 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 	echo "no diff, cannot predict"
 	continue
     fi
-    FILLTIMEDIFF=$(($ADDSUM_RES*$DTWINRES))
+    # 1. megnezzuk hanyszor van meg a jelenlegi szabad helyben a kulonbseg
+    # 2. megszorozzuk a szamot az idoablakkal
+    # 3. hozzaadjuk a jelenlegi datumhoz
+    FILLTIMEDIFF=$(($LASTFREE_RES/$ADDSUM_RES*$DTWINRES))
+
+    dsp "Fill time diff: ${FILLTIMEDIFF}"
+
+    # calculate when it will fill up
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    dsp "filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} ) [ ${MP} ]"
+    dsp "samples: $SAMPLES - filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} ) [ ${MP} ]"
     dsp " "
 done
