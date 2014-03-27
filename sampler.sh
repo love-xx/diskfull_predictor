@@ -6,7 +6,7 @@ WINDOWSIZE="$@"
 
 # debug
 function dbg {
-   echo "( $@ )"
+#   echo "( $@ )"
    I=2
 }
 
