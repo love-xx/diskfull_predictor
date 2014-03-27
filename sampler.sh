@@ -65,7 +65,11 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     PROJECTEDFREEGB=$(($PROJECTEDFREE/1024/1024))
     echo "last free: ${RESMIN} ( $RESMINMB MB / $RESMINGB GB)"
     echo "[samples: ${SAMPLES}] free space at ${PROJRES}: $PROJECTEDFREE ( $PROJECTEDFREEMB MB / $PROJECTEDFREEGB GB) ( diff: ${DIFF} )(${MP})"
-    
+
+    if [ ${DIFF} -lt 1 ]; then
+	echo "free space difference in the database is zero, cannot predict yet."
+	exit
+    fi    
     FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
     echo "filltime: ${FILLTIME} (precision ${JDIFFDAY} day or $JDIFFHOUR hours or $JDIFFMIN minutes)"
