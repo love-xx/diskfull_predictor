@@ -68,7 +68,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 
     if [ ${DIFF} -lt 1 ]; then
 	echo "free space difference in the database is zero, cannot predict yet."
-	exit
+	continue
     fi    
     FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
