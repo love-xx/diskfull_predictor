@@ -11,13 +11,14 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     echo
     
 
-    MINDT="select min(dt) from disk_info where mount_point like '${MP}'"
-    MAXDT="select max(dt) from disk_info where mount_point like '${MP}'"
+    MINDT="select min(datetime(dt,'localtime')) from disk_info where mount_point like '${MP}'"
+    MAXDT="select max(datetime(dt,'localtime')) from disk_info where mount_point like '${MP}'"
     
     MINDTRES=`sqlite3 ./disk.sqlite3 "${MINDT}"`
     MAXDTRES=`sqlite3 ./disk.sqlite3 "${MAXDT}"`
     JDIFFDAY=`sqlite3 ./disk.sqlite3 "select julianday(\"$MAXDTRES\") - julianday(\"$MINDTRES\")"`
-    JDIFFHOUR=$(echo $JDIFFDAY*24 | bc |  awk '{printf("%d\n",$1 + 0.5)}')
+    JDIFFHOUR=$(echo $JDIFFDAY*24 | bc)
+    JDIFFMIN=$(echo $JDIFFHOUR*60 | bc)
     echo "daydiff: ${JDIFFDAY}"
     echo "hourdiff: ${JDIFFHOUR}"
     echo "first data at: ${MINDTRES}"
@@ -27,18 +28,27 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     DTWINRES=`sqlite3 ./disk.sqlite3 "${DTWINDOWSQ}"`
 
     # add projection to current date
-    PROJQ="select datetime(strftime('%s','now') + ${DTWINRES},'unixepoch')"
+    PROJQ="select datetime(strftime('%s','now') + ${DTWINRES},'unixepoch','localtime')"
     PROJRES=`sqlite3 ./disk.sqlite3 "${PROJQ}"`
-#    echo "projecting to date: ${PROJRES}"
+    echo "projecting to date: ${PROJRES}"
 
     QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
     SAMPLES=`sqlite3 ./disk.sqlite3 "${QSAMPLES}"`
+
+    if [ ${SAMPLES} -lt 2 ]; then
+	echo "samples: ${SAMPLES}"
+	echo "i need at least two sample for calculations"
+	exit
+    fi
 
     QMIN="select min(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
     QMAX="select max(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-72 hours') and mount_point like '${MP}'"
 
     RESMIN=`sqlite3 ./disk.sqlite3 "${QMIN}"`
     RESMAX=`sqlite3 ./disk.sqlite3 "${QMAX}"`
+
+    echo "resmin: ${RESMIN}"
+    echo "resmax: ${RESMAX}"
 
     RESMINMB=$(($RESMIN/1024))
     RESMINGB=$(($RESMIN/1024/1024))
@@ -56,31 +66,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     echo "last free: ${RESMIN} ( $RESMINMB MB / $RESMINGB GB)"
     echo "[samples: ${SAMPLES}] free space at ${PROJRES}: $PROJECTEDFREE ( $PROJECTEDFREEMB MB / $PROJECTEDFREEGB GB) ( diff: ${DIFF} )(${MP})"
     
-    SFREE=${RESMIN}
-    FOUND=0
-    for i in {1..1000}
-    do
-	if [ ${DIFF} -eq 0 ]; then
-	    FOUND=1
-	    break
-	fi
-	SFREE=$(($SFREE-$DIFF))
-#	echo "checking ${i} ( ${SFREE} )"
-	if [ ${SFREE} -lt 0 ]; then
-	    FOUND=1
-	    echo "the disk will full in loop ${i}"
-	    DTDIFF=$((${i}*${DTWINRES}))
-	    UTIME=`sqlite3 ./disk.sqlite3 "select strftime('%s','now') + ${DTDIFF}"`
-#	    echo "utime: ${UTIME}"
-	    CTIME=`sqlite3 ./disk.sqlite3 "select datetime(${UTIME},'unixepoch')"`
-	    echo
-	    echo " ====> predicted full time: ${CTIME} (precision: ${JDIFFHOUR} hours )<===="
-	    echo
-	    break
-	fi
-    done
-    if [ ${FOUND} -eq 0 ]; then
-	echo "i don't know when it will full"
-    fi
-    
+    FILLTIMEDIFF=$(($RESMIN/$DIFF*$DTWINRES))
+    FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
+    echo "filltime: ${FILLTIME} (precision ${JDIFFDAY} day or $JDIFFHOUR hours or $JDIFFMIN minutes)"
 done

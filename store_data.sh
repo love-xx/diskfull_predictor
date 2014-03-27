@@ -3,6 +3,7 @@
 # stores disk stats (gyula.weber.in@gmail.com)
 
 if [ ! -f ./disk.sqlite3 ]; then
+    echo " -> disk.sqlite3 does not exists. creating and inserting schema"
     sqlite3 ./disk.sqlite3 <./schema.sql
 fi
 
@@ -35,4 +36,5 @@ df| grep -vE '^Filesystem' | awk '{print $1 ";" $4}' | grep -v 'tmpfs' | grep -v
     echo "running:     sqlite3 ./disk.sqlite3 ${Q}" 
     sqlite3 ./disk.sqlite3 "${Q}"
 done
+
 echo "OK"
