@@ -76,7 +76,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     ADDSUM_RES=$(sqlite3 ./disk.sqlite3 "$ADDSUM_Q")
     dbg "change: ${ADDSUM_RES}"
     if [ ${#ADDSUM_RES} -lt 1 ]; then
-	echo "no diff, cannot predict"
+	echo "no diff for ${MP}, cannot predict"
 	continue
     fi
     # 1. megnezzuk hanyszor van meg a jelenlegi szabad helyben a kulonbseg
