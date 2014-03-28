@@ -47,12 +47,12 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     # get maximum time window
     MAXWINQ="select strftime('%s','now') - strftime('%s',min(dt)) from disk_info where mount_point like '${MP}'"
     MAXWIN=$(sqlite3 ./disk.sqlite3 "${MAXWINQ}")
-    echo "maximum window size for this mount point: ${MAXWIN}"
-    echo "given time window: ${BACKDTWINRES}"
+    dbg "maximum window size for this mount point: ${MAXWIN}"
+    dbg "given time window: ${BACKDTWINRES}"
     
     
     if [ ${MAXWIN} -lt ${BACKDTWINRES} ]; then
-	echo "maximum time window is smaller than the given. adjusting time window to the maximum"
+	dbg "maximum time window is smaller than the given. adjusting time window to the maximum"
 	BACKDTWINRES=$MAXWIN
     fi
     
