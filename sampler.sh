@@ -6,7 +6,7 @@ WINDOWSIZE="$@"
 
 # debug
 function dbg {
-#   echo "( $@ )"
+   echo "( $@ )"
    I=2
 }
 
@@ -44,6 +44,18 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     dbg " "
     
 
+    # get maximum time window
+    MAXWINQ="select strftime('%s','now') - strftime('%s',min(dt)) from disk_info where mount_point like '${MP}'"
+    MAXWIN=$(sqlite3 ./disk.sqlite3 "${MAXWINQ}")
+    echo "maximum window size for this mount point: ${MAXWIN}"
+    echo "given time window: ${BACKDTWINRES}"
+    
+    
+    if [ ${MAXWIN} -lt ${BACKDTWINRES} ]; then
+	echo "maximum time window is smaller than the given. adjusting time window to the maximum"
+	BACKDTWINRES=$MAXWIN
+    fi
+    
     DTWINRES=$BACKDTWINRES
     dbg "windows size: ${DTWINRES}"
 
@@ -61,7 +73,6 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     dbg "last free: ${LASTFREE_RES}"
 
     ADDSUM_Q="select sum(diff) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}' and increased <> 2"
-    dbg "$ADDSUM_Q"
     ADDSUM_RES=$(sqlite3 ./disk.sqlite3 "$ADDSUM_Q")
     dbg "change: ${ADDSUM_RES}"
     if [ ${#ADDSUM_RES} -lt 1 ]; then
@@ -77,6 +88,6 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 
     # calculate when it will fill up
     FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    dsp "samples: $SAMPLES - filltime: ${FILLTIME} (precision = windowsize = ${WINDOWSIZE} ) [ ${MP} ]"
+    dsp "samples: $SAMPLES - filltime: ${FILLTIME} [ ${MP} ]"
     dsp " "
 done
