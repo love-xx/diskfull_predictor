@@ -64,7 +64,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 
     if [ ${SAMPLES} -lt 2 ]; then
 	dsp "samples: ${SAMPLES}"
-	dsp "i need at least two sample for calculations"
+	dsp "i need at least two sample for calculations ( ${MP} )"
 	exit
     fi
 
