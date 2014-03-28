@@ -45,7 +45,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     
 
     # get maximum time window
-    MAXWINQ="select strftime('%s','now') - strftime('%s',min(dt)) from disk_info where mount_point like '${MP}'"
+    MAXWINQ="select strftime('%s','now') - strftime('%s',dt) from disk_info where mount_point like '${MP}' order by dt desc limit 1"
     MAXWIN=$(sqlite3 ./disk.sqlite3 "${MAXWINQ}")
     dbg "maximum window size for this mount point: ${MAXWIN}"
     dbg "given time window: ${BACKDTWINRES}"
