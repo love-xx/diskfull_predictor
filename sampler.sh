@@ -87,7 +87,11 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
     dbg "Fill time diff: ${FILLTIMEDIFF}"
 
     # calculate when it will fill up
-    FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-    dsp "samples: $SAMPLES - filltime: ${FILLTIME} [ ${MP} ]"
+    if [ ${FILLTIMEDIFF} -lt 0 ]; then
+	dsp "the free space is increased for ${MP} in the given period. i should predict when the disk will be empty but why? :)"
+    else
+	FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
+	dsp "samples: $SAMPLES - filltime: ${FILLTIME} [ ${MP} ]"
+    fi
     dsp " "
 done
