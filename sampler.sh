@@ -2,12 +2,20 @@
 
 # walks trough each mount point, calculates the interval between the first and last check, and uses it as a step to calculate when it will get full
 # support: gyula.weber.in@gmail.com
+DEBUG=0
+
+if [ "$1" = "-v" ]; then
+	DEBUG=1
+	shift
+fi
 WINDOWSIZE="$@"
 
 # debug
 function dbg {
-#   echo "( $@ )"
-   I=2
+	if [ $DEBUG -eq 1 ]; then
+		I=2
+		echo "( $@ )"
+	fi
 }
 
 # display
@@ -15,83 +23,54 @@ function dsp {
     echo "$@"
 }
 
-
-if [ ${#WINDOWSIZE} -lt 3 ]; then
-    dsp "usage: ${0} <window size> (window size can be 2 hours, 4 days, and so on)"
-    exit
-fi
 TODAY=$(date  +"%Y-%m-%d")
 
-BACKDT="select datetime('now','-${WINDOWSIZE}')"
-BACKDTRES=$(sqlite3 ./disk.sqlite3 "${BACKDT}")
-
-CDT="select datetime('now')"
-CDTRES=$(sqlite3 ./disk.sqlite3 "${CDT}")
-
-BACKDTWINQ="select strftime('%s','${CDTRES}') - strftime('%s','${BACKDTRES}')"
-BACKDTWINRES=$(sqlite3 ./disk.sqlite3 "$BACKDTWINQ") 
-
-echo "measuring from: 
-${BACKDTRES} -
-${CDTRES}
--------------------------
-"
-
-
 sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read MP; do
-    dbg " "
+	echo
     dbg "### disk stats for ${MP} ####"
-    dbg " "
-    
+	NEGATIVE=0
+	MAX=$(sqlite3 ./disk.sqlite3 "select dt from disk_info where mount_point like '${MP}' order by dt desc limit 1")
+	MIN=""
+	if [ ${#WINDOWSIZE} -lt 3 ]; then
+		# get minimum window size
+		MIN=$(sqlite3 ./disk.sqlite3 "select dt from disk_info where mount_point like '${MP}' order by dt desc limit 2,1")
+	else
+		MIN=$(sqlite3 ./disk.sqlite3 "select datetime('now','-${WINDOWSIZE}')")
+	fi
+		
+		dbg "max: ${MAX}"
+		dbg "min: ${MIN}"
+		MAXDT=$(sqlite3 ./disk.sqlite3 "select strftime('%s','${MAX}')")
+		MINDT=$(sqlite3 ./disk.sqlite3 "select strftime('%s','${MIN}')")
+		dbg "maxdt: ${MAXDT}"
+		dbg "mindt: ${MINDT}"
+		DTDIFF=$(($MAXDT-$MINDT))
+		dbg "dtdiff: ${DTDIFF}"
+		FREE=$(sqlite3 ./disk.sqlite3 "select free from disk_info order by dt desc limit 1")
+		dbg "free: ${FREE}"
+		DIFF=$(sqlite3 ./disk.sqlite3 "select sum(diff) from disk_info where dt > '$MIN'")
+		dbg "space diff: ${DIFF}"
+		WINDOW_CNT=$(($FREE/$DIFF))
+		dbg "window cnt: ${WINDOW_CNT}"
+		TS_OFFSET=$((DTDIFF*WINDOW_CNT))
+		if [ $TS_OFFSET -lt 0 ]; then
+			NEGATIVE=1
+		fi
+		dbg "timestamp offset: ${TS_OFFSET}"
+		REAL_TS=$(($MAXDT+$TS_OFFSET))
+		dbg "real timestamp: ${REAL_TS}"
+		FILL_DT=$(sqlite3 ./disk.sqlite3 "select datetime($REAL_TS,'unixepoch','localtime')")
+		dbg "predicted fill dt: ${FILL_DT}"
 
-    # get maximum time window
-    MAXWINQ="select strftime('%s','now') - strftime('%s',dt) from disk_info where mount_point like '${MP}' order by dt desc limit 1"
-    MAXWIN=$(sqlite3 ./disk.sqlite3 "${MAXWINQ}")
-    dbg "maximum window size for this mount point: ${MAXWIN}"
-    dbg "given time window: ${BACKDTWINRES}"
-    
-    
-    if [ ${MAXWIN} -lt ${BACKDTWINRES} ]; then
-	dbg "maximum time window is smaller than the given. adjusting time window to the maximum"
-	BACKDTWINRES=$MAXWIN
-    fi
-    
-    DTWINRES=$BACKDTWINRES
-    dbg "windows size: ${DTWINRES}"
+	if [ $DIFF -lt 1 ]; then
+		dbg "negative of zero offset, free space is increased in the given period"
+		NEGATIVE=1
+	fi
+	
+	if [ $NEGATIVE -ne 1 ]; then
+		dsp "${MP} will fill on ${FILL_DT}"
+	else
+		dbg "its negative"
+	fi
 
-    QSAMPLES="select count(free) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}'"
-    SAMPLES=`sqlite3 ./disk.sqlite3 "${QSAMPLES}"`
-
-    if [ ${SAMPLES} -lt 2 ]; then
-	dsp "samples: ${SAMPLES}"
-	dsp "i need at least two sample for calculations ( ${MP} )"
-	exit
-    fi
-
-    LASTFREE_Q="select free from disk_info where mount_point like '${MP}' order by dt desc limit 1"
-    LASTFREE_RES=$(sqlite3 ./disk.sqlite3 "${LASTFREE_Q}")
-    dbg "last free: ${LASTFREE_RES}"
-
-    ADDSUM_Q="select sum(diff) from disk_info where dt < datetime('now') and dt > datetime('now', '-${WINDOWSIZE}') and mount_point like '${MP}' and increased <> 2"
-    ADDSUM_RES=$(sqlite3 ./disk.sqlite3 "$ADDSUM_Q")
-    dbg "change: ${ADDSUM_RES}"
-    if [ ${#ADDSUM_RES} -lt 1 ]; then
-	echo "no diff for ${MP}, cannot predict"
-	continue
-    fi
-    # 1. megnezzuk hanyszor van meg a jelenlegi szabad helyben a kulonbseg
-    # 2. megszorozzuk a szamot az idoablakkal
-    # 3. hozzaadjuk a jelenlegi datumhoz
-    FILLTIMEDIFF=$(($LASTFREE_RES/$ADDSUM_RES*$DTWINRES))
-
-    dbg "Fill time diff: ${FILLTIMEDIFF}"
-
-    # calculate when it will fill up
-    if [ ${FILLTIMEDIFF} -lt 0 ]; then
-	dsp "the free space is increased for ${MP} in the given period. i should predict when the disk will be empty but why? :)"
-    else
-	FILLTIME=`sqlite3 ./disk.sqlite3 "select datetime(strftime('%s','now') + ${FILLTIMEDIFF}, 'unixepoch', 'localtime')"`
-	dsp "samples: $SAMPLES - filltime: ${FILLTIME} [ ${MP} ]"
-    fi
-    dsp " "
 done
