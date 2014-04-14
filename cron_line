@@ -1,0 +1,8 @@
+# crontab entry for diskfull_predictor data collection
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# update path in order to get this work
+* *  * * *   root	cd __PATH__;./store_data.sh
+* */2 * * * root cd __PATH__;./cleanup.sh

@@ -50,6 +50,12 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 		dbg "free: ${FREE}"
 		DIFF=$(sqlite3 ./disk.sqlite3 "select sum(diff) from disk_info where dt > '$MIN'")
 		dbg "space diff: ${DIFF}"
+		
+		if [ ${DIFF} -eq 0 ]; then
+		    echo "no difference, cannot calculate fill time for ${MP}"
+		    continue
+		fi
+		
 		WINDOW_CNT=$(($FREE/$DIFF))
 		dbg "window cnt: ${WINDOW_CNT}"
 		TS_OFFSET=$((DTDIFF*WINDOW_CNT))
@@ -71,6 +77,7 @@ sqlite3 ./disk.sqlite3 "select distinct mount_point from disk_info" | while read
 		dsp "${MP} will fill on ${FILL_DT}"
 	else
 		dbg "its negative"
+		dsp "free space is increased in ${MP}, cannot calculate fill time"
 	fi
 
 done
